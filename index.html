@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flappy X-Wing</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: black;
+      font-family: 'Press Start 2P', monospace;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: none;
+      margin: auto;
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+    }
+
+    #background {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: auto;
+      z-index: -1;
+    }
+
+    #gameOverModal, #welcomeScreen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    #gameOverModal { display: none; }
+
+    #modalContent {
+      background: #222;
+      border: 4px solid #00ffcc;
+      padding: 20px;
+      text-align: center;
+      color: #00ffcc;
+      box-shadow: 0 0 10px #00ffcc;
+      width: 260px;
+    }
+
+    #modalShip {
+      width: 80px;
+      margin-bottom: 20px;
+      image-rendering: pixelated;
+    }
+
+    #finalScore {
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+
+    #playAgainBtn, #playButton {
+      padding: 10px 20px;
+      background: #000;
+      border: 2px solid #00ffcc;
+      color: #00ffcc;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      animation: blink 1s infinite;
+    }
+
+    #playAgainBtn:hover, #playButton:hover {
+      background: #00ffcc;
+      color: #000;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    #welcomeImage {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      image-rendering: pixelated;
+      z-index: 1;
+    }
+
+    #playButton {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+  </style>
+</head>
+<body>
+
+<div id="welcomeScreen">
+  <img id="welcomeImage" src="welcome.png" alt="Welcome">
+  <button id="playButton">PLAY</button>
+</div>
+
+<canvas id="gameCanvas" width="480" height="640"></canvas>
+<img id="background" src="background.png" alt="background">
+
+<div id="gameOverModal">
+  <div id="modalContent">
+    <img src="xwing.png" alt="X-Wing" id="modalShip">
+    <div id="finalScore">Score: 0</div>
+    <button id="playAgainBtn">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  const bgImg = document.getElementById("background");
+
+  const xWingImg = new Image();
+  xWingImg.src = "xwing.png";
+
+  let xWing = {
+    x: 50,
+    y: 300,
+    width: 100,
+    height: 32,
+    gravity: 0.25,
+    lift: -3.5,
+    velocity: 0
+  };
+
+  let pipes = [];
+  let score = 0;
+  let gameOver = false;
+  let bgX = 0;
+
+  function drawXWing() {
+    ctx.drawImage(xWingImg, xWing.x, xWing.y, xWing.width, xWing.height);
+  }
+
+  function drawBackground() {
+    bgX -= 1;
+    if (bgX <= -4704) bgX = 0;
+    ctx.drawImage(bgImg, bgX, 0, 4704, canvas.height);
+    ctx.drawImage(bgImg, bgX + 4704, 0, 4704, canvas.height);
+  }
+
+  function drawPipes() {
+    for (let i = 0; i < pipes.length; i++) {
+      let p = pipes[i];
+      ctx.fillStyle = "#007f46";
+      ctx.fillRect(p.x, 0, p.width, p.top);
+      ctx.fillRect(p.x, p.top + p.gap, p.width, canvas.height);
+    }
+  }
+
+  function updatePipes() {
+    if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - 200) {
+      let gap = 180;
+      let top = Math.random() * (canvas.height - gap - 100);
+      pipes.push({ x: canvas.width, width: 50, top: top, gap: gap });
+    }
+    for (let i = 0; i < pipes.length; i++) {
+      pipes[i].x -= 2;
+      if (!pipes[i].passed && pipes[i].x + pipes[i].width < xWing.x) {
+        score++;
+        pipes[i].passed = true;
+      }
+    }
+    pipes = pipes.filter(p => p.x + p.width > 0);
+  }
+
+  function checkCollision() {
+    for (let i = 0; i < pipes.length; i++) {
+      let p = pipes[i];
+      if (
+        xWing.x + xWing.width > p.x &&
+        xWing.x < p.x + p.width &&
+        (xWing.y < p.top || xWing.y + xWing.height > p.top + p.gap)
+      ) {
+        gameOver = true;
+      }
+    }
+    if (xWing.y + xWing.height > canvas.height || xWing.y < 0) {
+      gameOver = true;
+    }
+  }
+
+  function drawScore() {
+    ctx.fillStyle = "#aaa";
+    ctx.font = "16px 'Press Start 2P', monospace";
+    ctx.fillText("Score: " + score, 20, 30);
+  }
+
+  function showGameOverModal() {
+    document.getElementById("finalScore").innerText = `Score: ${score}`;
+    document.getElementById("gameOverModal").style.display = "flex";
+  }
+
+  function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawBackground();
+    drawPipes();
+    drawXWing();
+    drawScore();
+    updatePipes();
+
+    xWing.velocity += xWing.gravity;
+    xWing.y += xWing.velocity;
+
+    checkCollision();
+
+    if (!gameOver) {
+      requestAnimationFrame(gameLoop);
+    } else {
+      showGameOverModal();
+    }
+  }
+
+  document.addEventListener("keydown", () => xWing.velocity = xWing.lift);
+  document.addEventListener("mousedown", () => xWing.velocity = xWing.lift);
+
+  document.getElementById("playAgainBtn").addEventListener("click", () => location.reload());
+
+  document.getElementById("playButton").addEventListener("click", () => {
+    document.getElementById("welcomeScreen").style.display = "none";
+    canvas.style.display = "block";
+    gameLoop();
+  });
+</script>
+</body>
+</html>
